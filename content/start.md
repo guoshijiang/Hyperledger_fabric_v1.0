@@ -105,9 +105,45 @@ https://www.npmjs.com/package/windows-build-tools
 
 在教程开始之前，我们提供了一组示例应用程序，您可能希望安装这些Hyperledger结构示例，因为教程利用示例代码。
 
-如果您在Windows上运行，您将需要使用Docker Quickstart终端来获取即将发布的终端命令。 如果您以前没有安装它，请访问必备条件部分。
+注意：如果您在Windows上运行，您将需要使用Docker Quickstart终端来获取即将发布的终端命令。 如果您以前没有安装它，请访问必备条件部分。如果您在Windows7或macOS上使用Docker Toolbox，则在安装和运行示例时，您需要使用C:\Users（Windows 7）或/Users（macOS）下的位置。如果你是在Mac上使用Docker，则需要使用/Users，/Volumes，/private或/tmp下的位置。 要使用不同的位置，请参阅Docker文档以进行文件共享。如果你是在windows平台上使用的是Docker，请参阅Docker文档中的共享驱动器，并使用其中一个共享驱动器下的位置。
 
+确定在计算机上的特定位置放置Hyperledger Fabric示例应用程序存储库，并在终端窗口中打开该位置。 然后，执行以下命令：
 
+        git clone -b master https://github.com/hyperledger/fabric-samples.git
+        cd fabric-samples
+        git checkout {TAG}
+       
+为了确保样本与您在下面下载的Fabric二进制文件版本兼容，请检查与您的Fabric版本相匹配的样本{TAG}，例如v1.1.0。 要查看所有面料样本标签的列表，请使用命令“git tag”。
 
+### 一.下载特定于平台的二进制文件
 
+接下来，我们将安装Hyperledger Fabric平台特定的二进制文件。 此过程旨在补充上面的Hyperledger Fabric样例，但可以单独使用。 如果您没有安装上述示例，那么只需创建并输入一个目录，在该目录中提取特定于平台的二进制文件的内容。
 
+请从您将解压缩特定于平台的二进制文件的目录中执行以下命令：
+
+    curl -sSL https://goo.gl/6wtTN5 | bash -s 1.1.0
+
+注意：如果运行上述curl命令时出现错误，则可能会有太旧的卷曲版本，无法处理重定向或不支持的环境。请查看必备条件部分，了解有关在哪里可以找到最新版本的curl并获得正确环境的其他信息。 或者，您可以替换未缩短的网址：https：//github.com/hyperledger/fabric/blob/master/scripts/bootstrap.sh
+
+注意：您可以使用上述命令来发布任何已发布的Hyperledger Fabric版本。 只需将“1.1.0”替换为您希望安装的版本的版本标识符即可。
+
+上面的命令下载并执行bash脚本，该脚本将下载并提取所有需要设置网络并将它们放入上面创建的克隆仓库的平台指定定二进制文件。 它检索四个特定于平台的二进制文件：
+* cryptogen,
+* configtxgen,
+* configtxlator,
+* peer
+* orderer和fabric-ca-client
+
+并将它们放在当前工作目录的bin子目录中。
+
+您可能希望将其添加到PATH环境变量中，以便可以在不完全限定每个二进制文件的路径的情况下提取它们。 例如：
+
+        export PATH=<path to download location>/bin:$PATH
+
+最后，脚本会将来自Docker Hub的Hyperledger Fabric docker镜像下载到您的本地Docker注册表中，并将它们标记为“最新”。
+
+该脚本列出了在结束时安装的Docker镜像。
+
+查看每个镜像的名称; 这些组件将最终构成我们的Hyperledger Fabric网络。 您还会注意到，您有两个相同镜像ID的实例 - 一个标记为“x86_64-1.x.x”，一个标记为“最新”。
+
+注意：在不同的体系结构中，x86_64将被替换为标识您的体系结构的字符串。
