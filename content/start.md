@@ -97,4 +97,17 @@ https://www.npmjs.com/package/windows-build-tools
   
     npm install --global grpc
 
+## 第二节：安装二进制文件和Docker镜像
+
+在我们致力于开发Hyperledger Fabric二进制文件的真正安装程序时，我们提供了一个脚本，可以将特定于平台的二进制文件下载到您的系统。 该脚本还会将Docker镜像下载到您的本地注册表中。
+
+## 第三节：Hyperledger Fabric样例
+
+在教程开始之前，我们提供了一组示例应用程序，您可能希望安装这些Hyperledger结构示例，因为教程利用示例代码。
+
+如果您在Windows上运行，您将需要使用Docker Quickstart终端来获取即将发布的终端命令。 如果您以前没有安装它，请访问必备条件部分。
+
+
+
+
 
