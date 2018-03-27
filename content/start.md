@@ -61,7 +61,7 @@ Hyperledger Fabric在其许多组件中使用Go编程语言1.9.x。
 
 检查Python版本
 
-  python --version
+    python --version
 
 ### Windows的其他说明
 
