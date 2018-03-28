@@ -250,6 +250,121 @@ Fabric CA提供3种方法来配置Fabric CA服务器和客户端的设置。 优
 * 环境变量
 * 配置文件
 
+在本文档的其余部分中，我们指的是对配置文件进行更改。 但是，可以通过环境变量或CLI标志覆盖配置文件更改。
+
+例如，如果我们在客户端配置文件中具有以下内容：
+
+    tls:
+      # Enable TLS (default: false)
+      enabled: false
+
+      # TLS for the client's listenting port (default: false)
+      certfiles:
+      client:
+        certfile: cert.pem
+        keyfile:
+
+以下环境变量可用于覆盖配置文件中的`cert.pem`设置：
+
+    export FABRIC_CA_CLIENT_TLS_CLIENT_CERTFILE=cert2.pem
+    
+如果我们想覆盖环境变量和配置文件，我们可以使用命令行标志。
+
+    fabric-ca-client enroll --tls.client.certfile cert3.pem
+    
+同样的方法适用于fabric-ca-server，除了不使用FABIRC_CA_CLIENT作为环境变量的前缀外，还使用FABRIC_CA_SERVER。
+
+#### 文件路径
+
+Fabric CA服务器和客户端配置文件中指定文件名的所有属性都支持相对路径和绝对路径。 相对路径相对于配置文件所在的config目录。 例如，如果config目录是〜/ config，并且tls部分如下所示，则Fabric CA服务器或客户端将在〜/config目录中查找root.pem文件，在〜/config中查找cert.pem文件/certs目录和/abs/ path目录中的key.pem文件
+
+    tls:
+      enabled: true
+      certfiles:
+        - root.pem
+      client:
+        certfile: certs/cert.pem
+        keyfile: /abs/path/key.pem
+
+
+## 第三节:Fabric CA服务端
+
+本节介绍Fabric CA服务器。
+
+启动之前，您可以初始化Fabric CA服务器。 这会提供了一个机会用于生成可在启动服务器之前进行审查和自定义的默认配置文件。
+
+Fabric CA服务器主目录的确定方式如下：
+
+* 如果设置了-home命令行选项，请使用其值
+* 否则，如果设置了FABRIC_CA_SERVER_HOME环境变量，则使用其值
+* 否则，如果FABRIC_CA_HOME环境变量已设置，请使用其值
+* 否则，如果设置了CA_CFG_PATH环境变量，请使用其值
+* 否则，使用当前工作目录
+
+对于此服务器部分的其余部分，我们假设您已将FABRIC_CA_HOME环境变量设置为$HOME/fabric-ca/server。
+
+以下说明假定服务器配置文件存在于服务器的主目录中。
+
+### 一.初始化服务器
+
+初始化Fabric CA服务器的命令如下：
+
+    fabric-ca-server init -b admin:adminpw
+
+禁用LDAP时，需要使用-b（引导程序标识）选项进行初始化。 启动Fabric CA服务器至少需要一个引导程序标识; 这个身份是服务器管理员。
+
+服务器配置文件包含可配置的证书签名请求（CSR）部分。 以下是CSR示例。
+
+    cn: fabric-ca-server
+    names:
+       - C: US
+         ST: "North Carolina"
+         L:
+         O: Hyperledger
+         OU: Fabric
+    hosts:
+      - host1.example.com
+      - localhost
+    ca:
+       expiry: 131400h
+       pathlength: 1
+
+以上所有字段都与由`fabric-ca-server init`生成的X.509签名密钥和证书。 这对应于服务器配置文件中的`ca.certfile`和`ca.keyfile`文件。 这些字段如下所示：
+
+* cn是通用名称
+* O是组织的名称
+* OU是组织单位
+* L是位置或城市
+* ST是国家
+* C是国家
+
+如果需要CSR的自定义值，则可以自定义配置文件，删除由`ca.certfile`和`ca.keyfil`e配置项指定的文件，然后再次运行`fabric-ca-server init -b admin：adminpw`命令。
+
+除非指定了`-u <parent-fabric-ca-server-URL>`选项，否则`fabric-ca-server init`命令会生成自签名CA证书。 如果指定了-u，则服务器的CA证书由父Fabric CA服务器签署。 为了向父Fabric CA服务器进行身份验证，URL的格式必须为`<scheme>://<enrollmentID>：<secret> @ <host>：<port>`，其中`<enrollmentID>`和`<secret>`对应于 `'hf.IntermediateCA'`属性的值等于`'true'`。 `fabric-ca-server init`命令还会在服务器的主目录中生成一个名为`fabric-ca-server-config.yaml`的默认配置文件。
+
+如果您希望Fabric CA服务器使用您提供的CA签名证书和密钥文件，则必须将文件分别放置在由`ca.certfile`和`ca.keyfile引`用的位置。 两个文件都必须是PEM编码的，并且不得加密。 更具体地说，CA证书文件的内容必须以`----- BEGIN CERTIFICATE -----`开头，并且密钥文件的内容必须以`----- BEGIN PRIVATE KEY -----`开头，而不是 `-----BEGIN ENCRYPTED PRIVATE KEY-----`。
+
+##### 算法和密钥长度
+
+可以定制CSR以生成支持椭圆曲线（ECDSA）的X.509证书和密钥。 以下设置是使用曲线prime256v1和签名算法`ecdsa-with-SHA256`实施椭圆曲线数字签名算法（ECDSA）的一个示例：
+
+    key:
+       algo: ecdsa
+       size: 256
+
+算法的选择和密钥的长度选择基于安全性的需要
+
+椭圆曲线（ECDSA）提供了下面的密钥长度选择：
+
+| 长度 |	ASN1 OID |  	  签名算法    |
+|-----|-----------|-------------------|
+| 256 |	prime256v1|	ecdsa-with-SHA256 |
+| 384 |	secp384r1 |	ecdsa-with-SHA384 |
+| 521 |	secp521r1 |	ecdsa-with-SHA512 |
+
+
+
+
 
 
 
