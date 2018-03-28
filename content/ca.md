@@ -391,4 +391,127 @@ Fabric CA服务监听的端口是7054。
 
 #### 1.PostgreSQL
 
+The following sample may be added to the server’s configuration file in order to connect to a PostgreSQL database. Be sure to customize the various values appropriately. There are limitations on what characters are allowed in the database name. Please refer to the following Postgres documentation for more information: https://www.postgresql.org/docs/current/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+
+
+
+以下示例可能会添加到服务器的配置文件中，以便连接到PostgreSQL数据库。 一定要适当地自定义各种值。 数据库名称中允许使用哪些字符有限制。 有关更多信息，请参阅以下Postgres文档：
+
+https://www.postgresql.org/docs/current/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
+
+    db:
+      type: postgres
+      datasource: host=localhost port=5432 user=Username password=Password dbname=fabric_ca sslmode=verify-full
+
+指定sslmode配置SSL身份验证的类型。 sslmode的有效值为：
+
+|    模式   |                     描述                     |
+|----------|----------------------------------------------|
+|   禁用	  |  非SSL                                       |                                        
+|   要求	  |  始终SSL（跳过验证）                           |
+|  认证-ca  |  始终SSL（验证服务器提供的证书是否由受信任的CA签名） |
+|  验证全   |  始终SSL（验证服务器提供的证书是否由受信任的CA签名） |   
+|  服务器   |  主机名与证书中的主机名相匹配                     |
+
+如果您想使用TLS，则必须指定Fabric CA服务器配置文件中的`db.tls`部分。 如果在`PostgreSQL`服务器上启用了SSL客户端身份验证，则还必须在`db.tls.client`部分中指定客户端证书和密钥文件。 以下是`db.tls`部分的示例：
+
+    db:
+      ...
+      tls:
+          enabled: true
+          certfiles:
+            - db-server-cert.pem
+          client:
+                certfile: db-client-cert.pem
+                keyfile: db-client-key.pem
+
+
+certfiles-PEM编码的可信根证书文件列表。
+certfile和密钥文件-结构CA服务器用于与PostgreSQL服务器安全通信的PEM编码证书和密钥文件
+
+#### 2.PostgreSQL SSL配置
+
+##### 在PostgreSQL服务器上配置SSL的基本说明：
+
+在postgresql.conf中，取消注释SSL并设置为“on”（SSL = on）
+将证书和密钥文件放在PostgreSQL数据目录中。
+
+有关生成自签名证书的说明：https://www.postgresql.org/docs/9.5/static/ssl-tcp.html
+
+注意：自签名证书仅用于测试目的，不应在生产环境中使用
+
+##### PostgreSQL服务器-需要客户端证书
+
+* 将您信任的证书颁发机构（CA）的证书放入PostgreSQL数据目录中的文件root.crt中
+* 在postgresql.conf中，将“ssl_ca_file”设置为指向客户端的根证书（CA cert）
+* 在pg_hba.conf中的相应hostssl行上将clientcert参数设置为1。
+
+有关在PostgreSQL服务器上配置SSL的更多详细信息，请参阅以下PostgreSQL文档：https://www.postgresql.org/docs/9.4/static/libpq-ssl.html
+
+#### 2.Mysql
+
+以下示例可能会添加到结构CA服务器配置文件中，以便连接到MySQL数据库。 一定要适当地自定义各种值。 数据库名称中允许使用哪些字符有限制。 有关更多信息，请参阅以下MySQL文档：https：//dev.mysql.com/doc/refman/5.7/en/identifiers.html
+
+在MySQL 5.7.X中，某些模式会影响服务器是否允许“0000-00-00”作为有效日期。 可能需要放松MySQL服务器使用的模式。 我们希望允许服务器能够接受零日期值。
+
+在my.cnf中，找到配置选项sql_mode并删除NO_ZERO_DATE（如果存在）。 进行此更改后重新启动MySQL服务器。
+
+请参阅以下有关不同可用模式的MySQL文档，并为正在使用的特定版本的MySQL选择适当的设置。
+
+https://dev.mysql.com/doc/refman/5.7/en/sql-mode.html
+
+    db:
+      type: mysql
+      datasource: root:rootpw@tcp(localhost:3306)/fabric_ca?parseTime=true&tls=custom
+
+如果通过TLS连接到MySQL服务器，那么也需要`db.tls.client`部分，如上面的PostgreSQL部分所述。
+
+##### MySQL SSL配置
+
+1.打开或创建服务器的my.cnf文件。 在[mysqld]部分添加或取消注释下面的行。 这些应指向服务器的密钥和证书以及根CA证书。
+
+有关创建服务器和客户端认证的说明：http://dev.mysql.com/doc/refman/5.7/en/creating-ssl-files-using-openssl.html
+
+[mysqld] ssl-ca=ca-cert.pem ssl-cert=server-cert.pem ssl-key=server-key.pem
+
+可以运行以下查询以确认SSL已启用。
+
+mysql> SHOW GLOBAL VARIABLES LIKE ‘have_%ssl’;
+
+应该会看到：
+
+| Variable_name |	Value  |
+|---------------|----------|
+| have_openssl	|   YES    |
+| have_ssl	    |   YES    |
+
+2.服务器端SSL配置完成后，下一步是创建一个有权通过SSL访问MySQL服务器的用户。 为此，请登录到MySQL服务器，然后键入：
+
+mysql> GRANT ALL PRIVILEGES ON . TO ‘ssluser’@’%’ IDENTIFIED BY ‘password’ REQUIRE SSL; mysql> FLUSH PRIVILEGES;
+
+如果您想给出用户访问服务器的特定IP地址，请将'％'更改为特定的IP地址。
+
+##### MySQL服务器-需要客户端证书
+
+安全连接的选项与服务器端使用的选项类似。
+
+* ssl-ca标识证书颁发机构（CA）证书。 如果使用此选项，则必须指定服务器使用的相同证书。
+* ssl-cert标识MySQL服务器的证书。
+* ssl-key标识MySQL服务器的私钥。
+
+假设您要使用无特殊加密要求的帐户进行连接，或者使用包含REQUIRE SSL选项的GRANT语句创建该帐户。 作为一组推荐的安全连接选项，至少使用-ssl-cert和-ssl-key选项启动MySQL服务器。 然后在服务器配置文件中设置db.tls.certfiles属性并启动Fabric CA服务器。
+
+要要求指定客户端证书，请使用REQUIRE X509选项创建帐户。 然后客户端还必须指定适当的客户端密钥和证书文件; 否则，MySQL服务器将拒绝连接。 要为Fabric CA服务器指定客户端密钥和证书文件，请设置db.tls.client.cert文件和db.tls.client.keyfile配置属性。
+
+
+
+
+
+
+
+
+
+
+
+
 
