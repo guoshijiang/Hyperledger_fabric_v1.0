@@ -362,10 +362,34 @@ Fabric CA服务器主目录的确定方式如下：
 | 384 |	secp384r1 |	ecdsa-with-SHA384 |
 | 521 |	secp521r1 |	ecdsa-with-SHA512 |
 
+### 二.启动服务器
 
+启动服务器的命令如下：
 
+    fabric-ca-server start -b <admin>:<adminpw>
 
+如果服务器以前没有被初始化，它将在第一次启动时自行初始化。 在初始化期间，如果服务器尚不存在，服务器将生成`ca-cert.pem`和`ca-key.pem`文件，并且如果该文件不存在，还会创建一个默认配置文件。 
 
+除非Fabric CA服务器配置为使用LDAP，否则必须至少配置一个预先注册的引导程序标识，以便您注册和注册其他标识。 -b选项指定引导标识的名称和密码。
+
+要使Fabric CA服务器在https而不是http上进行侦听，请将`tls.enabled`设置为`true`。
+
+要限制相同密码可用于注册的次数，请将配置文件中的`registry.maxenrollments`设置为适当的值。 如果将值设置为1，则Fabric CA服务器允许密码仅针对特定注册ID使用一次。 如果将该值设置为-1，Fabric CA服务器不会限制密钥可以重新用于注册的次数。 默认值是-1。 将该值设置为0，Fabric CA服务器将禁止所有身份的注册，并且不允许注册身份。
+
+Fabric CA服务监听的端口是7054。
+
+如果您不想将Fabric CA服务器配置为在集群中运行或使用LDAP，则可以跳到结构CA客户端部分。
+
+### 三.配置数据库
+
+本节介绍如何配置Fabric CA服务器以连接PostgreSQL或MySQL数据库。默认数据库是SQLite，Fabric CA服务器主目录中的默认数据库文件是fabric-ca-server.db。
+
+如果您不关心在群集中运行Fabric CA服务器，则可以跳过本节; 否则，您必须按照下面所述配置PostgreSQL或MySQL。 Fabric CA在集群设置中支持以下数据库版本：
+
+* PostgreSQL: 9.5.5或者更高
+* MySQL: 5.7或者更高
+
+#### 1.PostgreSQL
 
 
 
