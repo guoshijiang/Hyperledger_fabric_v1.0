@@ -29,6 +29,256 @@ Hyperledger Fabric CA客户端或SDK可能连接到Hyperledger Fabric CA服务�
 
 一台服务器可能包含多个CA。 每个CA都是根CA或中间CA. 每个中间CA都有一个父CA，它是根CA或另一个中间CA.
 
+## 第二节.Hyperledger fabric CA入门
+
+### 一.使用的必要条件
+
+* 安装go 1.9+ 
+* 设置正确的GOPATH环境变量
+* 安装libtool和libtdhl-dev软件包
+
+以下内容是在Ubuntu上安装libtool依赖项：
+
+    sudo apt install libtool libltdl-dev
+
+以下内容是在MacOSX上安装libtool依赖项：
+
+    brew install libtool
+
+注意：如果您通过Homebrew安装libtool，则libtldl-dev在MacOSX上不是必需的
+
+有关libtool的更多信息，请点击：https://www.gnu.org/software/libtool。
+
+有关libltdl-dev的更多信息，请点击：https://www.gnu.org/software/libtool/manual/html_node/Using-libltdl.html。
+
+### 二.安装
+
+以下安装将会在$GOPATH/bin中安装fabric-ca-server和fabric-ca-client的二进制文件。
+
+    go get -u github.com/hyperledger/fabric-ca/cmd/...
+
+注意：如果你已经克隆了fabric-ca代码，请在运行上面的“go get”命令之前确保您位于master分支上。 否则，您可能会看到以下错误：
+
+        <gopath>/src/github.com/hyperledger/fabric-ca; git pull --ff-only
+        There is no tracking information for the current branch.
+        Please specify which branch you want to merge with.
+        See git-pull(1) for details.
+
+            git pull <remote> <branch>
+
+        If you wish to set tracking information for this branch you can do so with:
+
+            git branch --set-upstream-to=<remote>/<branch> tlsdoc
+
+        package github.com/hyperledger/fabric-ca/cmd/fabric-ca-client: exit status 1
+
+### 三.本地启动服务器
+
+以下命令以默认设置启动fabric-ca-server。
+
+    fabric-ca-server start -b admin:adminpw
+
+-b选项为引导管理员提供注册ID和密码; 如果LDAP未启用“ldap.enabled”设置，则这是必需的。
+
+一个名为fabric-ca-server-config.yaml的默认配置文件将在可以自定义的本地目录中创建。
+
+### 四.通过Docker启动服务
+
+#### 1.Docker Hub
+
+点击这个链接：https://hub.docker.com/r/hyperledger/fabric-ca/tags/ 
+
+找到与您想要提取的fabric-ca的体系结构和版本相匹配的标签。
+
+到这个目录下：$GOPATH/src/github.com/hyperledger/fabric-ca/docker/server并在编辑器中打开docker-compose.yml。
+
+更改镜像行以反映您之前找到的标签。 该文件对于Beta版本的x86体系结构也是这样的。
+
+    fabric-ca-server:
+      image: hyperledger/fabric-ca:x86_64-1.0.0-beta
+      container_name: fabric-ca-server
+      ports:
+        - "7054:7054"
+      environment:
+        - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
+      volumes:
+        - "./fabric-ca-server:/etc/hyperledger/fabric-ca-server"
+      command: sh -c 'fabric-ca-server start -b admin:adminpw'
+
+在与docker-compose.yml文件相同的目录中打开终端并执行以下命令：
+
+    # docker-compose up -d
+
+如果尚未存在，则会将组合文件中指定的fabric-ca镜像下拉，然后启动fabric-ca服务器的实例。
+
+#### 2.构建你自己的Docker镜像
+
+您可以通过docker-compose构建并启动服务器，如下所示。
+
+    cd $GOPATH/src/github.com/hyperledger/fabric-ca
+    make docker
+    cd docker/server
+    docker-compose up -d
+    
+hyperled/fabric-ca docker镜像包含fabric-ca-server和fabric-ca-client。
+
+    # cd $GOPATH/src/github.com/hyperledger/fabric-ca
+    # FABRIC_CA_DYNAMIC_LINK=true make docker
+    # cd docker/server
+    # docker-compose up -d
+    
+### 五.探索Fabric CA CLI
+
+本节仅为方便起见提供Fabric CA服务器和客户端的使用消息。以下部分提供了其他使用信息。
+
+#### 1.服务器命令行
+
+    Hyperledger Fabric Certificate Authority Server
+
+    Usage:
+      fabric-ca-server [command]
+
+    Available Commands:
+      init        Initialize the fabric-ca server
+      start       Start the fabric-ca server
+      version     Prints Fabric CA Server version
+
+    Flags:
+          --address string                            Listening address of fabric-ca-server (default "0.0.0.0")
+      -b, --boot string                               The user:pass for bootstrap admin which is required to build default config file
+          --ca.certfile string                        PEM-encoded CA certificate file (default "ca-cert.pem")
+          --ca.chainfile string                       PEM-encoded CA chain file (default "ca-chain.pem")
+          --ca.keyfile string                         PEM-encoded CA key file
+      -n, --ca.name string                            Certificate Authority name
+          --cacount int                               Number of non-default CA instances
+          --cafiles stringSlice                       A list of comma-separated CA configuration files
+          --cfg.affiliations.allowremove              Enables removal of affiliations dynamically
+          --cfg.identities.allowremove                Enables removal of identities dynamically
+          --crl.expiry duration                       Expiration for the CRL generated by the gencrl request (default 24h0m0s)
+          --crlsizelimit int                          Size limit of an acceptable CRL in bytes (default 512000)
+          --csr.cn string                             The common name field of the certificate signing request to a parent fabric-ca-server
+          --csr.hosts stringSlice                     A list of space-separated host names in a certificate signing request to a parent fabric-ca-server
+          --csr.serialnumber string                   The serial number in a certificate signing request to a parent fabric-ca-server
+          --db.datasource string                      Data source which is database specific (default "fabric-ca-server.db")
+          --db.tls.certfiles stringSlice              A list of comma-separated PEM-encoded trusted certificate files (e.g. root1.pem,root2.pem)
+          --db.tls.client.certfile string             PEM-encoded certificate file when mutual authenticate is enabled
+          --db.tls.client.keyfile string              PEM-encoded key file when mutual authentication is enabled
+          --db.type string                            Type of database; one of: sqlite3, postgres, mysql (default "sqlite3")
+      -d, --debug                                     Enable debug level logging
+      -H, --home string                               Server's home directory (default "/etc/hyperledger/fabric-ca")
+          --intermediate.enrollment.label string      Label to use in HSM operations
+          --intermediate.enrollment.profile string    Name of the signing profile to use in issuing the certificate
+          --intermediate.parentserver.caname string   Name of the CA to connect to on fabric-ca-server
+      -u, --intermediate.parentserver.url string      URL of the parent fabric-ca-server (e.g. http://<username>:<password>@<address>:<port)
+          --intermediate.tls.certfiles stringSlice    A list of comma-separated PEM-encoded trusted certificate files (e.g. root1.pem,root2.pem)
+          --intermediate.tls.client.certfile string   PEM-encoded certificate file when mutual authenticate is enabled
+          --intermediate.tls.client.keyfile string    PEM-encoded key file when mutual authentication is enabled
+          --ldap.attribute.names stringSlice          The names of LDAP attributes to request on an LDAP search
+          --ldap.enabled                              Enable the LDAP client for authentication and attributes
+          --ldap.groupfilter string                   The LDAP group filter for a single affiliation group (default "(memberUid=%s)")
+          --ldap.tls.certfiles stringSlice            A list of comma-separated PEM-encoded trusted certificate files (e.g. root1.pem,root2.pem)
+          --ldap.tls.client.certfile string           PEM-encoded certificate file when mutual authenticate is enabled
+          --ldap.tls.client.keyfile string            PEM-encoded key file when mutual authentication is enabled
+          --ldap.url string                           LDAP client URL of form ldap://adminDN:adminPassword@host[:port]/base
+          --ldap.userfilter string                    The LDAP user filter to use when searching for users (default "(uid=%s)")
+      -p, --port int                                  Listening port of fabric-ca-server (default 7054)
+          --registry.maxenrollments int               Maximum number of enrollments; valid if LDAP not enabled (default -1)
+          --tls.certfile string                       PEM-encoded TLS certificate file for server's listening port (default "tls-cert.pem")
+          --tls.clientauth.certfiles stringSlice      A list of comma-separated PEM-encoded trusted certificate files (e.g. root1.pem,root2.pem)
+          --tls.clientauth.type string                Policy the server will follow for TLS Client Authentication. (default "noclientcert")
+          --tls.enabled                               Enable TLS on the listening port
+          --tls.keyfile string                        PEM-encoded TLS key for server's listening port
+
+    Use "fabric-ca-server [command] --help" for more information about a command.
+
+#### 2.客户端命令行。
+
+    Hyperledger Fabric Certificate Authority Client
+
+    Usage:
+      fabric-ca-client [command]
+
+    Available Commands:
+      affiliation Manage affiliations
+      enroll      Enroll an identity
+      gencrl      Generate a CRL
+      gencsr      Generate a CSR
+      getcacert   Get CA certificate chain
+      identity    Manage identities
+      reenroll    Reenroll an identity
+      register    Register an identity
+      revoke      Revoke an identity
+      version     Prints Fabric CA Client version
+
+    Flags:
+          --caname string                  Name of CA
+          --csr.cn string                  The common name field of the certificate signing request
+          --csr.hosts stringSlice          A list of space-separated host names in a certificate signing request
+          --csr.names stringSlice          A list of comma-separated CSR names of the form <name>=<value> (e.g. C=CA,O=Org1)
+          --csr.serialnumber string        The serial number in a certificate signing request
+      -d, --debug                          Enable debug level logging
+          --enrollment.attrs stringSlice   A list of comma-separated attribute requests of the form <name>[:opt] (e.g. foo,bar:opt)
+          --enrollment.label string        Label to use in HSM operations
+          --enrollment.profile string      Name of the signing profile to use in issuing the certificate
+      -H, --home string                    Client's home directory (default "$HOME/.fabric-ca-client")
+          --id.affiliation string          The identity's affiliation
+          --id.attrs stringSlice           A list of comma-separated attributes of the form <name>=<value> (e.g. foo=foo1,bar=bar1)
+          --id.maxenrollments int          The maximum number of times the secret can be reused to enroll (default CA's Max Enrollment)
+          --id.name string                 Unique name of the identity
+          --id.secret string               The enrollment secret for the identity being registered
+          --id.type string                 Type of identity being registered (e.g. 'peer, app, user') (default "client")
+      -M, --mspdir string                  Membership Service Provider directory (default "msp")
+      -m, --myhost string                  Hostname to include in the certificate signing request during enrollment (default "$HOSTNAME")
+      -a, --revoke.aki string              AKI (Authority Key Identifier) of the certificate to be revoked
+      -e, --revoke.name string             Identity whose certificates should be revoked
+      -r, --revoke.reason string           Reason for revocation
+      -s, --revoke.serial string           Serial number of the certificate to be revoked
+          --tls.certfiles stringSlice      A list of comma-separated PEM-encoded trusted certificate files (e.g. root1.pem,root2.pem)
+          --tls.client.certfile string     PEM-encoded certificate file when mutual authenticate is enabled
+          --tls.client.keyfile string      PEM-encoded key file when mutual authentication is enabled
+      -u, --url string                     URL of fabric-ca-server (default "http://localhost:7054")
+
+    Use "fabric-ca-client [command] --help" for more information about a command.
+
+请注意，作为字符串切片（列表）的命令行选项可以通过使用以逗号分隔的列表元素指定选项或多次指定选项来指定，每个选项都包含组成列表的字符串值。 例如，要为`csr.hosts`选项指定`host1`和h`ost2`，可以传递`--csr.hosts'host1，host2'`或`--csr.hosts host1 --csr.hosts host2`。 使用以前的格式时，请确保在逗号前后没有空格。
+
+### 六.配置设置
+
+Fabric CA提供3种方法来配置Fabric CA服务器和客户端的设置。 优先顺序是：
+
+* CLI 标志
+* 环境变量
+* 配置文件
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
