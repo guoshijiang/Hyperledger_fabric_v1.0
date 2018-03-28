@@ -147,3 +147,33 @@ https://www.npmjs.com/package/windows-build-tools
 查看每个镜像的名称; 这些组件将最终构成我们的Hyperledger Fabric网络。 您还会注意到，您有两个相同镜像ID的实例 - 一个标记为“x86_64-1.x.x”，一个标记为“最新”。
 
 注意：在不同的体系结构中，x86_64将被替换为标识您的体系结构的字符串。
+
+## 第四节：Hyperledger Fabric API文档
+
+Hyperledger Fabric的Golang API的API文档可以在Fabric的Godoc站点上找到。 如果您打算使用这些API进行任何开发，你可以点击下面的链接进去看。
+    
+https://godoc.org/github.com/hyperledger/fabric
+
+## 第五节：Hyperledger Fabric SDK
+
+Hyperledger Fabric旨在为各种编程语言提供许多SDK。前两个交付的SDK是Node.js和Java SDK。 在后续版本中将会提供Python，REST和Go SDK。
+
+* Node.js的SDK英语文档： https://fabric-sdk-node.github.io/
+* Java的SDK英语文档：https://github.com/hyperledger/fabric-sdk-java
+
+关于上面这两个文档的内容我们将会在后面的章节中介绍
+
+## 第六节:Hyperledger Fabric证书认证服务
+
+Hyperledger Fabric提供可选的证书颁发机构服务，您可以选择使用该服务来生成证书和密钥材料，以配置和管理区块链网络中的身份。 但是，可以使用任何可以生成ECDSA证书的CA.关于证书的详细内容将会在后面章节中介绍
+
+
+
+
+
+
+
+
+
+
+
