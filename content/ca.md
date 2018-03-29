@@ -503,15 +503,278 @@ mysql> GRANT ALL PRIVILEGES ON . TO ‘ssluser’@’%’ IDENTIFIED BY ‘passw
 
 要要求指定客户端证书，请使用REQUIRE X509选项创建帐户。 然后客户端还必须指定适当的客户端密钥和证书文件; 否则，MySQL服务器将拒绝连接。 要为Fabric CA服务器指定客户端密钥和证书文件，请设置db.tls.client.cert文件和db.tls.client.keyfile配置属性。
 
+#### 3.配置LDAP
+
+fabric CA服务器可以配置为从LDAP服务器读取。
+
+特别是，Fabric CA服务器可能会连接到LDAP服务器以执行以下操作：
+
+* 在注册之前验证身份
+* 检索用于授权的身份的属性值。
+
+修改Fabric CA服务器的配置文件的LDAP部分，将服务器配置为连接到LDAP服务器。
+
+    ldap:
+       # Enables or disables the LDAP client (default: false)
+       enabled: false
+       # The URL of the LDAP server
+       url: <scheme>://<adminDN>:<adminPassword>@<host>:<port>/<base>
+       userfilter: <filter>
+       attribute:
+          # 'names' is an array of strings that identify the specific attributes
+          # which are requested from the LDAP server.
+          names: <LDAPAttrs>
+          # The 'converters' section is used to convert LDAP attribute values
+          # to fabric CA attribute values.
+          #
+          # For example, the following converts an LDAP 'uid' attribute
+          # whose value begins with 'revoker' to a fabric CA attribute
+          # named "hf.Revoker" with a value of "true" (because the expression
+          # evaluates to true).
+          #    converters:
+          #       - name: hf.Revoker
+          #         value: attr("uid") =~ "revoker*"
+          #
+          # As another example, assume a user has an LDAP attribute named
+          # 'member' which has multiple values of "dn1", "dn2", and "dn3".
+          # Further assume the following configuration.
+          #    converters:
+          #       - name: myAttr
+          #         value: map(attr("member"),"groups")
+          #    maps:
+          #       groups:
+          #          - name: dn1
+          #            value: orderer
+          #          - name: dn2
+          #            value: peer
+          # The value of the user's 'myAttr' attribute is then computed to be
+          # "orderer,peer,dn3".  This is because the value of 'attr("member")' is
+          # "dn1,dn2,dn3", and the call to 'map' with a 2nd argument of
+          # "group" replaces "dn1" with "orderer" and "dn2" with "peer".
+          converters:
+            - name: <fcaAttrName>
+              value: <fcaExpr>
+          maps:
+            <mapName>:
+                - name: <from>
+                  value: <to>
 
 
+* scheme:是ldap或ldaps之一
+* adminDN:是管理员用户的专有名称
+* pass:管理员用户密码
+* host:LDAP服务器的主机的IP地址
+* port:是可选的端口号，其中ldap的缺省值为389，ldaps的缺省值为636;
+* base:是用于搜索的LDAP树的可选根目录
+* filter:是在搜索时将过滤器用于将登录用户名转换为独特名称。 例如：（uid=％s）的值将使用值为登录用户名的uid属性的值来搜索LDAP条目。 同样，（电子邮件=％s）可用于使用电子邮件地址登录。
+* LDAPAttrs:是代表用户从LDAP服务器请求的LDAP属性名称数组;
+* attribute.converters部分用于将LDAP属性转换为fabric CA属性，其中*fcaAttrName是结构CA属性的名称; *fcaExpr是一个表达式，其评估值被分配给结构CA属性。 例如，假设<LDAPAttrs>是[“uid”]，<fcaAttrName>是'hf.Revoker'，并且<fcaExpr>是'attr（“uid”）=〜“revoker *”'。 这意味着代表用户从LDAP服务器请求名为“uid”的属性。 如果用户'uid'LDAP属性的值以'revoker'开头，那么用户将被赋予'true'值作为'hf.Revoker'属性。 否则，用户被赋予'hf.Revoker'属性的'false'值。
+* attribute.maps部分用于映射LDAP响应值。 典型的用例是将与LDAP组关联的独特名称映射到身份类型。
+
+LDAP表达式语言使用https://github.com/Knetic/govaluate/blob/master/MANUAL.md中描述的govaluate包。 这定义了诸如“=〜”之类的运算符和诸如“revoker *”之类的文字，这是一个正则表达式。 扩展基础高级语言的LDAP特定变量和函数如下所示：
+
+* DN:是一个等于用户可分辨名称的变量。
+* affiliation:是一个等于用户隶属关系的变量。
+* attr:是一个需要1或2个参数的函数。 第一个参数是一个LDAP属性名称。 第二个参数是一个分隔符字符串，用于将多个值连接到单个字符串中; 默认分隔符字符串是“，”。 attr函数总是返回一个'string'类型的值。
+* map:是一个需要2个参数的函数。 第一个参数是任何字符串。 第二个参数是一个映射的名字，用来对第一个参数的字符串进行字符串替换。
+* if:是一个函数，它需要3个参数，其中第一个参数必须解析为布尔值。 如果它的计算结果为true，则返回第二个参数; 否则，返回第三个参数。
+
+例如：如果用户具有以“O = org1，C = US”结尾的可分辨名称，或者如果用户具有以“org1.dept2”开头的联系并且还具有“admin” 属性为“true”。
+
+##### DN =~ “*O=org1,C=US” || (affiliation =~ “org1.dept2.*” && attr(‘admin’) = ‘true’)
+
+注意：由于attr函数总是返回一个'string'类型的值，所以数字操作符不能用于构造表达式。 例如，以下不是有效的表达式：
+
+    value: attr("gidNumber) >= 10000 && attr("gidNumber) < 10006
+    
+或者，如下所示的用引号引起来的正则表达式可用于返回等效的结果：
+
+    value: attr("gidNumber") =~ "1000[0-5]$" || attr("mail") == "root@example.com"
+    
+以下是DockLD镜像位于https://github.com/osixia/docker-openldap的OpenLDAP服务器默认设置的示例配置部分。
+
+    ldap:
+       enabled: true
+       url: ldap://cn=admin,dc=example,dc=org:admin@localhost:10389/dc=example,dc=org
+       userfilter: (uid=%s)
+
+请参阅FABRIC_CA/scripts/run-ldap-tests了解启动OpenLDAP docker镜像，配置它，在FABRIC_CA/cli/server/ldap/ldap_test.go中运行LDAP测试并停止OpenLDAP服务器的脚本。
+
+当配置LDAP时，注册工作如下：
+
+Fabric CA客户端或客户端SDK会发送带有基本授权标头的注册请求。
+
+Fabric CA服务器接收注册请求，解码授权头中的身份名称和密码，使用配置文件中的“userfilter”查找与身份名称关联的DN（Distinquished Name），然后尝试使用LDAP绑定身份的密码。 如果LDAP绑定成功，则注册处理将被授权并可继续。
+
+#### 4.配置集群
+
+您可以使用任何IP sprayer将负载均衡添加到Fabric CA服务器集群。 本节提供了一个如何设置Haproxy以路由到Fabric CA服务器群集的示例。 确保更改主机名和端口以反映Fabric CA Server的设置。
+
+###### haproxy.conf
+
+    global
+          maxconn 4096
+          daemon
+
+    defaults
+          mode http
+          maxconn 2000
+          timeout connect 5000
+          timeout client 50000
+          timeout server 50000
+
+    listen http-in
+          bind *:7054
+          balance roundrobin
+          server server1 hostname1:port
+          server server2 hostname2:port
+          server server3 hostname3:port
+
+注意：如果使用TLS，则需要使用tcp模式。
+
+#### 5.设置多个CA
+
+fabric-ca服务器默认由一个默认的CA组成。 但是，可以使用cafiles或cacount配置选项将其他CA添加到单个服务器。 每个额外的CA将拥有自己的主目录。
+
+##### cacount:
+
+Cacount提供了一种快速启动X个默认额外CA的快速方法。 主目录将相对于服务器目录。 使用此选项，目录结构如下所示：
+
+    --<Server Home>
+      |--ca
+        |--ca1
+        |--ca2
+
+每个额外的CA将在其主目录中获得一个默认配置文件，在配置文件中它将包含一个唯一的CA名称。
+
+例如，以下命令将启动2个默认CA实例：
+
+    fabric-ca-server start -b admin:adminpw --cacount 2
+
+##### cafiles：
+
+如果在使用cafiles配置选项时未提供绝对路径，则CA主目录将相对于服务器目录。
+
+要使用此选项，必须已为每个要启动的CA生成并配置CA配置文件。 每个配置文件必须具有唯一的CA名称和通用名称（CN），否则服务器将无法启动，因为这些名称必须是唯一的。 CA配置文件将覆盖任何默认CA配置，并且CA配置文件中的任何缺失选项将被默认CA的值替换。
+
+优先顺序如下：
+
+1.CA配置文件
+2.默认的CA CLI标志
+3.默认CA环境变量
+4.默认的CA配置文件
+
+CA配置文件必须至少包含以下内容：
+
+    ca:
+    # Name of this CA
+    name: <CANAME>
+
+    csr:
+      cn: <COMMONNAME>
+
+您可以按如下方式配置您的目录结构：
+
+    --<Server Home>
+      |--ca
+        |--ca1
+          |-- fabric-ca-config.yaml
+        |--ca2
+          |-- fabric-ca-config.yaml
+          
+例如，以下命令将启动两个自定义的CA实例：
+
+    fabric-ca-server start -b admin:adminpw --cafiles ca/ca1/fabric-ca-config.yaml
+    --cafiles ca/ca2/fabric-ca-config.yaml
+    
+#### 6.注册中间CA    
+ 
+ 为了为中间CA创建CA签名证书，中间CA必须按照fabric-ca-client向CA注册的相同方式注册父CA. 这是通过使用-u选项来指定父CA的URL以及注册ID和密码来完成的，如下所示。 与此注册ID关联的身份必须具有名称为“hf.IntermediateCA”和值“true”的属性。 已颁发证书的CN（或通用名称）将被设置为注册ID。 如果中间CA尝试明确指定CN值，则会发生错误。
+ 
+    fabric-ca-server start -b admin:adminpw -u http://<enrollmentID>:<secret>@<parentserver>:<parentport>
+
+ #### 7.升级服务器
+ 
+在升级Fabric CA客户端之前，必须升级Fabric CA服务器。 升级之前，建议备份当前数据库：
+ 
+* 如果使用sqlite3，请备份当前数据库文件（默认情况下命名为fabric-ca-server.db）。
+* 对于其他数据库类型，请使用适当的备份/复制机制。
+ 
+要升级Fabric CA服务器的单个实例：
+ 
+1.停止fabric-ca-server进程。
+2.确保当前数据库已备份。
+3.将之前的fabric-ca-server二进制文件替换为升级版本。
+4.启动fabric-ca-server进程。
+5.使用以下命令验证fabric-ca-server进程是否可用，其中<host>是启动服务器的主机名：
+
+    fabric-ca-client getcacert -u http://<host>:7054
+
+##### 升级群集：
+
+要使用MySQL或Postgres数据库升级fabric-ca-server实例的集群，请执行以下步骤。 我们假设您正在使用haproxy向host1和host2上的两个fabric-ca-server集群成员（分别在端口7054上侦听）进行负载均衡。完成此过程后，您将对升级的fabric-ca-server集群成员进行负载平衡 在host3和host4上分别监听端口7054。
+
+为了使用haproxy stats监视更改，启用统计信息收集。 将以下行添加到haproxy配置文件的全局部分：
+
+    stats socket /var/run/haproxy.sock mode 666 level operator
+    stats timeout 2m
+ 
+重新启动haproxy以获取更改：
+
+    # haproxy -f <configfile> -st $(pgrep haproxy)
+
+要显示haproxy“show stat”命令的摘要信息，以下函数可能对分析返回的大量CSV数据非常有用：
+ 
+    haProxyShowStats() {
+       echo "show stat" | nc -U /var/run/haproxy.sock |sed '1s/^# *//'|
+          awk -F',' -v fmt="%4s %12s %10s %6s %6s %4s %4s\n" '
+             { if (NR==1) for (i=1;i<=NF;i++) f[tolower($i)]=i }
+             { printf fmt, $f["sid"],$f["pxname"],$f["svname"],$f["status"],
+                           $f["weight"],$f["act"],$f["bck"] }'
+    }
+ 
+1.最初，您的haproxy配置文件与以下内容类似：
+ 
+    server server1 host1:7054 check
+    server server2 host2:7054 check
+ 
+将此配置更改为以下内容：
+
+    server server1 host1:7054 check backup
+    server server2 host2:7054 check backup
+    server server3 host3:7054 check
+    server server4 host4:7054 check
+ 
+ 2.使用新配置重新启动HA代理，如下所示：
+ 
+    haproxy -f <configfile> -st $(pgrep haproxy)
+
+“haProxyShowStats”现在将反映修改的配置，包含两个活动的旧版本备份服务器和两个（尚未启动）升级服务器：
+
+    sid   pxname      svname  status  weig  act  bck
+      1   fabric-cas  server3   DOWN     1    1    0
+      2   fabric-cas  server4   DOWN     1    1    0
+      3   fabric-cas  server1     UP     1    0    1
+      4   fabric-cas  server2     UP     1    0    1
+
+3.在host3和host4上安装fabric-ca-server的升级二进制文件。 host3和host4上新升级的服务器应该配置为使用与host1和host2上较旧的服务器相同的数据库。 启动升级后的服务器后，数据库将自动迁移。 haproxy会将所有新流量转发给升级后的服务器，因为它们未配置为备份服务器。 在继续之前，使用“fabric-ca-client getcacert”命令验证群集仍然正常工作。 此外，“haProxyShowStats”现在应该反映所有服务器都处于活动状态，类似于以下内容：
+ 
+    sid   pxname      svname  status  weig  act  bck
+      1   fabric-cas  server3    UP     1    1    0
+      2   fabric-cas  server4    UP     1    1    0
+      3   fabric-cas  server1    UP     1    0    1
+      4   fabric-cas  server2    UP     1    0    1
 
 
-
-
-
-
-
-
-
-
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+    
