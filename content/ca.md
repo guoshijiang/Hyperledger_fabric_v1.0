@@ -765,13 +765,21 @@ CA配置文件必须至少包含以下内容：
       3   fabric-cas  server1    UP     1    0    1
       4   fabric-cas  server2    UP     1    0    1
 
+4.停止host1和host2上的旧服务器。 在继续之前，使用“fabric-ca-client getcacert”命令验证您的新群集是否仍然正常工作。 然后从haproxy配置文件中删除旧的服务器备份配置，使其看起来类似于以下内容：
 
+    server server3 host3:7054 check
+    server server4 host4:7054 check
  
+5.使用新配置重新启动HA代理，如下所示：
  
- 
- 
- 
- 
+    haproxy -f <configfile> -st $(pgrep haproxy)
+
+“haProxyShowStats”现在将反映已修改的配置，其中两个已升级到新版本的活动服务器：
+
+    sid   pxname      svname  status  weig  act  bck
+      1   fabric-cas  server3   UP       1    1    0
+      2   fabric-cas  server4   UP       1    1    0
+
  
  
  
