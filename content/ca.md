@@ -783,6 +783,267 @@ CA配置文件必须至少包含以下内容：
 ## 第三节:Fabric CA客户端
 
 本节介绍如何使用fabric-ca-client命令。
- 
- 
+
+Fabric CA客户端的主目录确定如下：
+
+* 如果设置了-home命令行选项，请使用其值
+* 否则，如果FABRIC_CA_CLIENT_HOME环境变量已设置，请使用其值
+* 否则，如果FABRIC_CA_HOME环境变量已设置，请使用其值
+* 否则，如果设置了CA_CFG_PATH环境变量，请使用其值
+* 否则，使用$HOME/.fabric-ca-client
+
+以下说明假定客户端配置文件存在于客户端的主目录中。
+
+### 一.注册引导标识
+
+首先，如果需要，请在客户端配置文件中自定义CSR（证书签名请求）部分。 请注意，csr.cn字段必须设置为引导标识的ID。 默认CSR值如下所示：
+
+    csr:
+      cn: <<enrollment ID>>
+      key:
+        algo: ecdsa
+        size: 256
+      names:
+        - C: US
+          ST: North Carolina
+          L:
+          O: Hyperledger Fabric
+          OU: Fabric CA
+      hosts:
+       - <<hostname of the fabric-ca-client>>
+      ca:
+        pathlen:
+        pathlenzero:
+        expiry:
+
+Then run fabric-ca-client enroll command to enroll the identity. For example, following command enrolls an identity whose ID is admin and password is adminpw by calling Fabric CA server that is running locally at 7054 port.
+
+然后运行`fabric-ca-client enroll`命令来注册身份。 例如，以下命令通过调用在7054端口本地运行的Fabric CA服务器来登录其标识为admin且密码为adminpw的标识。
+
+    export FABRIC_CA_CLIENT_HOME=$HOME/fabric-ca/clients/admin
+    fabric-ca-client enroll -u http://admin:adminpw@localhost:7054
     
+登记命令在Fabric CA客户端的`msp`目录的子目录中存储注册证书（ECert），相应的私钥和CA证书链PEM文件。 您将看到指示PEM文件存储位置的消息。
+
+### 二.注册一个新的身份
+
+执行注册请求的身份必须是当前登记的，并且已经注册的还必须具有正在注册的身份类型的适当权限。
+
+具体而言，fabric CA服务器在注册期间进行三次授权检查，如下所示：
+
+1.注册服务商（即调用者）必须具有带有逗号分隔值“hf.Registrar.Roles”属性列表，其中一个值等于正在注册的标识类型; 例如，如果注册服务商的“hf.Registrar.Roles”属性值为“peer，app，user”，则注册服务商可以注册peer，app和user类型的身份，但不能注册orderer类型的身份。
+
+2.注册服务商的隶属关系必须等于所注册身份的隶属关系的前缀。 例如，加入“a.b”的注册服务商可以注册“a.b.c”加入者的身份，但不得注册与“a.c”加入者的身份。 如果身份需要根隶属关系，那么联属请求应该是一个点（“.”），并且注册服务商还必须具有根隶属关系。 如果在注册申请中未指定从属关系，则注册的身份将被赋予注册商的隶属关系。
+
+3.如果满足以下所有条件，注册商可以向用户注册属性：
+
+* 只有当注册服务商拥有该属性并且它是hf.Registrar.Attributes属性值的一部分时，注册服务商才能注册具有前缀“hf。”的Fabric CA保留属性。此外，如果属性是类型列表，则被注册的属性的值必须等于或者是注册器具有的值的子集。如果该属性的类型为布尔型，则注册服务商只有在该属性的注册商值为'true'的情况下才能注册该属性。
+
+* 注册自定义属性（即名称不以'hf。'开头的任何属性）要求注册服务器具有“hf.Registar.Attributes”属性，其中注册了属性或模式的值。唯一支持的模式是末尾带有“*”的字符串。例如，“a.b.*”是匹配以“a.b.”开头的所有属性名称的模式。例如，如果注册服务商的hf.Registrar.Attributes = orgAdmin，则注册服务商可以添加或删除身份的唯一属性是'orgAdmin'属性。
+
+* 如果请求的属性名称是'hf.Registrar.Attributes'，则执行额外的检查以查看该属性的请求值是否等于或'hf.Registrar.Attributes'的注册服务商值的子集。为此，每个请求值必须与“hf.Registrar.Attributes”属性的注册商值相匹配。例如，如果'hf.Registrar.Attributes'的注册商值为'ab*，xyz'且所请求的属性值为'abc，xyz'，则它是有效的，因为'abc'与'ab *'匹配并且'xyz'与注册商的'xyz'值相匹配。
+
+#### 例子：
+####   有效方案：
+
+1.如果注册服务商具有属性'hf.Registrar.Attributes = a.b.*，x.y.z'并注册属性'a.b.c'，则'a.b.c'与'a.b.*'匹配是有效的。
+
+2.如果注册服务商具有属性'hf.Registrar.Attributes = a.b.*，x.y.z'并且正在注册属性'x.y.z'，则它是有效的，因为'x.y.z'与注册商的'x.y.z'值相匹配。
+
+3.如果注册服务商具有'hf.Registrar.Attributes = ab *，xyz'属性并且请求的属性值为'abc，xyz'，则它是有效的，因为'abc'匹配'ab *'和'xyz' 匹配注册商的“xyz”值。
+
+4.如果注册服务商具有'hf.Registrar.Roles = peer，client'属性并且所请求的属性值是'peer'或'peer，client'，则它是有效的，因为所请求的值等于或是注册商值的子集。
+
+####   无效方案
+
+1.如果注册服务商具有属性'hf.Registrar.Attributes = ab*，xyz'并且正在注册属性'hf.Registar.Attributes = abc，xy*'，则它是无效的，因为所请求的属性'xy*'不是所拥有的模式由注册商提供。值'xy *'是'xyz'的超集。
+
+2.如果注册服务商具有属性'hf.Registrar.Attributes = ab *，xyz'并且正在注册属性'hf.Registar.Attributes = abc，xyz，attr1'，则它是无效的，因为注册商的'hf.Registrar.Attributes'属性值不包含'attr1'。
+
+3.如果注册服务商具有属性'hf.Registrar.Attributes = a.b. *，x.y.z'并注册属性'a.b'，则它是无效的，因为'a.b. *'中不包含值'a.b'。
+
+4.如果注册商具有属性'hf.Registrar.Attributes = a.b. *，x.y.z'并注册属性'x.y'，则它是无效的，因为'x.y'不包含在'x.y.z'中。
+
+5.如果注册服务商具有'hf.Registrar.Roles = peer，client'属性并且请求的属性值为'peer，client，orderer'，则它是无效的，因为注册服务商在hf.Registrar的值中没有订购者角色.Roles属性。
+
+6.如果注册服务商具有'hf.Revoker = false'属性并且所请求的属性值为'true'，则它是无效的，因为hf.Revoker属性是布尔属性，并且该属性的注册商值不是'true'。
+
+下表列出了可以为身份注册的所有属性。属性的名称区分大小写。
+
+|名字	                         |   类型	  |                  描述                                   |
+|-----------------------------|----------|--------------------------------------------------------|
+|  hf.Registrar.Roles	      |	  List   |           允许注册服务商管理的角色列表                      |
+|  hf.Registrar.DelegateRoles |   List   |允许注册服务商向注册服务商提供其hf.Registrar.Roles属性的角色列表|
+|  hf.Registrar.Attributes    |   List   |           注册服务商可以注册的属性列表                      |
+|          hf.GenCRL          |  Boolean |         如果属性值为true，则Identity可以生成CRL             |
+|          hf.Revoker         |	 Boolean |	     如果属性值为真，Identity可以撤销用户和/或证书           |
+|        hf.AffiliationMgr    |	 Boolean |       如果属性值为true，则Identity可以管理从属关系           |
+|       hf.IntermediateCA     |  Boolean |	     如果属性值为true，身份可以作为中间CA注册               |
+
+注意：注册标识时，可以指定一组属性名称和值。 如果数组指定具有相同名称的多个数组元素，则当前仅使用最后一个元素。 换句话说，目前不支持多值属性。
+
+以下命令使用管理员身份凭证来注册一个新用户，其注册ID为“admin2”，属于“org1.department1”，属性名称为“hf.Revoker”，值为“true”，属性 命名为“admin”，值为“true”。 “：ecert”后缀意味着默认情况下，“admin”属性及其值将被插入到用户的注册证书中，然后可以用它来做出访问控制决定。
+
+    export FABRIC_CA_CLIENT_HOME=$HOME/fabric-ca/clients/admin
+    fabric-ca-client register --id.name admin2 --id.affiliation org1.department1 --id.attrs 'hf.Revoker=true,admin=true:ecert'
+    
+密码也被称为登记密码。 该密码需要注册身份。 这允许管理员注册身份并将注册ID和秘密给予别人以注册身份。
+
+可以将多个属性指定为-id.attrs标志的一部分，每个属性必须用逗号分隔。 对于包含逗号的属性值，必须将该属性封装在双引号中。 见下面的例子。
+
+    fabric-ca-client register -d --id.name admin2 --id.affiliation org1.department1 --id.attrs '"hf.Registrar.Roles=peer,user",hf.Revoker=true'
+
+或者
+
+    fabric-ca-client register -d --id.name admin2 --id.affiliation org1.department1 --id.attrs '"hf.Registrar.Roles=peer,user"' --id.attrs hf.Revoker=true
+
+您可以通过编辑客户端的配置文件来为register命令中使用的任何字段设置默认值。 例如，假设配置文件包含以下内容：
+
+    id:
+      name:
+      type: user
+      affiliation: org1.department1
+      maxenrollments: -1
+      attributes:
+        - name: hf.Revoker
+          value: true
+        - name: anotherAttrName
+          value: anotherAttrValue
+
+然后，以下命令将注册一个新的标识，其注册ID为“admin3”，它从命令行获取，剩余部分从配置文件中获取，包括标识类型：“user”，从属关系：“org1.department1” ，以及两个属性：“hf.Revoker”和“anotherAttrName”。
+
+    export FABRIC_CA_CLIENT_HOME=$HOME/fabric-ca/clients/admin
+    fabric-ca-client register --id.name admin3
+
+要注册具有多个属性的标识，需要在配置文件中指定所有属性名称和值，如上所示。
+
+将maxenrollments设置为0或将其从配置中删除将导致身份被注册为使用CA的最大注册值。 此外，注册身份的最大注册值不能超过CA的最大注册值。 例如，如果CA的最大注册值为5.任何新身份的值必须小于或等于5，也不能将其设置为-1（无限注册）。
+
+接下来，让我们注册一个peer身份，这将用于在以下部分注册peer。 以下命令注册peer1标识。 请注意，我们选择指定我们自己的密码（或秘密），而不是让服务器为我们生成密码。
+
+    export FABRIC_CA_CLIENT_HOME=$HOME/fabric-ca/clients/admin
+    fabric-ca-client register --id.name peer1 --id.type peer --id.affiliation org1.department1 --id.secret peer1pw
+
+请注意，除非服务器配置文件中指定的非叶隶属关系始终以小写形式存在，否则联属关系区分大小写。 例如，如果服务器配置文件的affiliations部分如下所示：
+
+    affiliations:
+      BU1:
+        Department1:
+          - Team1
+      BU2:
+        - Department2
+        - Department3
+
+BU1，Department1，BU2以小写形式存储。 这是因为Fabric CA使用Viper读取配置。 Viper将映射键视为不区分大小写，并始终返回小写值。 要注册与Team1关联的身份，需要将bu1.department1.Team1指定为-id.affiliation标志，如下所示：
+
+    export FABRIC_CA_CLIENT_HOME=$HOME/fabric-ca/clients/admin
+    fabric-ca-client register --id.name client1 --id.type client --id.affiliation bu1.department1.Team1
+
+### 三.注册peer身份
+
+现在您已经成功注册了peer身份，现在您可以根据注册ID和密码（即上一部分的密码）注册peer。 这与注册引导程序标识类似，只是我们还演示了如何使用“-M”选项填充Hyperledger Fabric MSP（成员资格服务提供程序）目录结构。
+
+以下命令注册peer1。 确保将“-M”选项的值替换为对等方MSP目录的路径，该目录是对等方的core.yaml文件中的“mspConfigPath”设置。 您还可以将FABRIC_CA_CLIENT_HOME设置为peer主目录。
+
+    export FABRIC_CA_CLIENT_HOME=$HOME/fabric-ca/clients/peer1
+    fabric-ca-client enroll -u http://peer1:peer1pw@localhost:7054 -M $FABRIC_CA_CLIENT_HOME/msp
+
+注册orderer是相同的，但除了MSP目录的路径是orderer的orderer.yaml文件中的'LocalMSPDir'设置。
+
+由fabric-ca-server发布的所有注册证书具有以下组织单位（或简称为“OU”）：
+
+1.OU层次结构的根等于标识类型
+2.为身份的隶属关系的每个组件添加一个OU
+
+例如，如果某个标识的类型为peer，且其隶属关系为department1.team1，则标识的OU层次结构（从叶子到根）为OU = team1，OU = department1，OU = peer。
+
+### 四.从另一个Fabric CA服务器获取CA证书链
+
+通常，MSP目录的cacerts目录必须包含其他证书颁发机构的证书颁发机构链，表示peer的所有信任根。
+
+`fabric-ca-client getcacerts`命令用于从其他Fabric CA服务器实例中检索这些证书链。
+
+例如，以下操作将在本地主机上侦听名为“CA2”的端口7055上的第二台Fabric CA服务器。 这表示一个完全独立的信任根，并由区块链上的其他成员管理。
+
+    export FABRIC_CA_SERVER_HOME=$HOME/ca2
+    fabric-ca-server start -b admin:ca2pw -p 7055 -n CA2
+
+以下命令将CA2的证书链安装到peer1的MSP目录中。
+
+    export FABRIC_CA_CLIENT_HOME=$HOME/fabric-ca/clients/peer1
+    fabric-ca-client getcacert -u http://localhost:7055 -M $FABRIC_CA_CLIENT_HOME/msp
+
+默认情况下，Fabric CA服务器按照子级优先顺序返回CA链。 这意味着链中的每个CA证书后面都有其颁发者的CA证书。 如果您需要Fabric CA服务器以相反的顺序返回CA链，那么请将环境变量CA_CHAIN_PARENT_FIRST设置为true，然后重新启动Fabric CA服务器。 Fabric CA客户端将适当地处理任一顺序。
+
+### 五.重新登录身份
+
+假设您的注册证书即将到期或已被入侵。 您可以发出reenroll命令来更新您的注册证书，如下所示。
+
+    export FABRIC_CA_CLIENT_HOME=$HOME/fabric-ca/clients/peer1
+    fabric-ca-client reenroll
+
+### 六.撤销证书或身份
+
+身份或证书可以被撤销。 撤销身份将撤销身份所拥有的所有证书，并且还会阻止身份获取任何新证书。 撤销证书将使单个证书无效。
+
+为了撤消证书或身份，主叫身份必须具有hf.Revoker和hf.Registrar.Roles属性。 撤销身份只能撤销证书或身份，其身份与撤消身份的隶属关系相同或前缀相同。 此外，revoker只能撤销在revoker的hf.Registrar.Roles属性中列出的类型的身份。
+
+例如，具有联盟orgs.org1和'hf.Registrar.Roles = peer，client'属性的撤销者可以撤销属于orgs.org1或orgs.org1.department1的同级或客户端类型身份，但不能撤销身份 附属于orgs.org2或任何其他类型。
+
+以下命令将禁用身份并吊销与身份关联的所有证书。 fabric CA服务器从此身份收到的所有未来请求都将被拒绝。
+
+    fabric-ca-client revoke -e <enrollment_id> -r <reason>
+
+以下是可以使用-r标志指定的支持原因：
+
+1.unspecified
+2.keycompromise
+3.cacompromise
+4.affiliationchange
+5.superseded
+6.cessationofoperation
+7.certificatehold
+8.removefromcrl
+9.privilegewithdrawn
+10.aacompromise
+
+例如，与联属树的根关联的引导管理员可以撤销peer1的身份，如下所示：
+
+    export FABRIC_CA_CLIENT_HOME=$HOME/fabric-ca/clients/admin
+    fabric-ca-client revoke -e peer1
+
+通过指定其AKI（授权密钥标识符）和序列号，可以撤销属于某个身份的注册证书，如下所示：
+
+    fabric-ca-client revoke -a xxx -s yyy -r <reason>
+
+例如，您可以使用openssl命令获取AKI和证书的序列号，并将它们传递给revoke命令以撤销所述证书，如下所示：
+
+    serial=$(openssl x509 -in userecert.pem -serial -noout | cut -d "=" -f 2)
+    aki=$(openssl x509 -in userecert.pem -text | awk '/keyid/ {gsub(/ *keyid:|:/,"",$1);print tolower($0)}')
+    fabric-ca-client revoke -s $serial -a $aki -r affiliationchange
+   
+-gencrl标志可用于生成包含所有撤销证书的CRL（证书吊销列表）。 例如，以下命令将撤销身份peer1，生成一个CRL并将其存储在<msp文件夹> /crls/crl.pem文件中。
+
+    fabric-ca-client revoke -e peer1 --gencrl
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
