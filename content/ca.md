@@ -1905,7 +1905,22 @@ https://github.com/hyperledger/fabric-samples/tree/release/fabric-ca/README.md
 
 3.将多个并行请求发送到使用共享sqlite3数据库的Fabric CA Server集群时，服务器偶尔会返回“数据库锁定”错误。 这很可能是因为数据库事务在等待数据库锁定（由另一个集群成员持有）被释放时超时。 这是一个无效的配置，因为sqlite是一个嵌入式数据库，这意味着Fabric CA服务器群集必须通过共享文件系统共享相同的文件，这会引入SPoF（单点故障），这与集群拓扑的目的相矛盾。 最佳做法是在集群拓扑中使用Postgres或MySQL数据库。
 
+4.假设类似于`Failed to deserialize creator identity, err The supplied identity is not valid, Verify() returned x509:`当使用由Fabric CA服务器发布的注册证书时，由未知权威签名的证书由peer或orderer返回。 这表示fabric CA服务器用于颁发证书的签名CA证书与用于进行授权检查的MSP的cacerts或intermediatecerts文件夹中的证书不匹配。
 
+用于进行授权检查的MSP取决于您在发生错误时执行的操作。 例如，如果您尝试在对peers上安装链式代码，则会使用peers文件系统上的本地MSP; 否则，如果您正在执行一些特定通道操作（例如在特定通道上实例化链式代码），则会使用通道块中的MSP或通道的最新配置块。
 
+要确认这是问题，请将注册证书的AKI（授权密钥标识符）与合适MSP的cacerts和intermediatecerts文件夹中的证书的SKI（主题密钥标识符）进行比较。 命令openssl x509 -in <PEM-file> -noout -text | grep -A1“权限密钥标识符”将显示AKI和openssl x509 -in <PEM-file> -noout -text | grep -A1“主题密钥标识符”将显示SKI。 如果不相等，则确认这是错误的原因。
 
+这可能由于多种原因而发生，包括：
 
+* 您使用cryptogen生成密钥材料，但未使用cryptogen生成的签名密钥和证书启动fabric-ca-server。解决方案（假设FABRIC_CA_SERVER_HOME设置为fabric-ca-server的主目录）：
+
+1.停止fabric-ca-server。
+2.将crypto-config/peerOrganizations/<orgName>/ca/* pem复制到$FABRIC_CA_SERVER_HOME/ca-cert.pem。
+3.将crypto-config/peerOrganizations/<orgName>/ca/* _ sk复制到$FABRIC_CA_SERVER_HOME/msp/keystore/。
+4.启动fabric-ca-server。
+5.删除任何先前发行的注册证书，并通过重新注册获取新证书。
+
+* 在生成生成块后，您删除并重新创建了Fabric CA Server使用的CA签名密钥和证书。 如果Fabric CA Server在Docker容器中运行，容器已重新启动，并且其主目录不在卷装载上，则会发生这种情况。 在这种情况下，Fabric CA Server将创建一个新的CA签名密钥和证书。
+
+假设您无法恢复原始CA签名密钥，则从此方案中恢复的唯一方法是将相应MSP的cacerts（或中间套件）中的证书更新为新的CA证书。
