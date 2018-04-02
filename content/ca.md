@@ -996,16 +996,16 @@ BU1，Department1，BU2以小写形式存储。 这是因为Fabric CA使用Viper
 
 以下是可以使用-r标志指定的支持原因：
 
-1.unspecified
-2.keycompromise
-3.cacompromise
-4.affiliationchange
-5.superseded
-6.cessationofoperation
-7.certificatehold
-8.removefromcrl
-9.privilegewithdrawn
-10.aacompromise
+* 1.unspecified
+* 2.keycompromise
+* 3.cacompromise
+* 4.affiliationchange
+* 5.superseded
+* 6.cessationofoperation
+* 7.certificatehold
+* 8.removefromcrl
+* 9.privilegewithdrawn
+* 10.aacompromise
 
 例如，与联属树的根关联的引导管理员可以撤销peer1的身份，如下所示：
 
@@ -1026,19 +1026,100 @@ BU1，Department1，BU2以小写形式存储。 这是因为Fabric CA使用Viper
 
     fabric-ca-client revoke -e peer1 --gencrl
 
+CRL也可以使用gencrl命令生成。
 
+### 七.生成CRL（证书撤销列表）
 
+在Fabric CA服务器中吊销证书后，还必须更新Hyperledger Fabric中的相应MSP。 这包括peers的本地MSP以及相应通道配置块中的MSP。 为此，PEM编码的CRL（证书吊销列表）文件必须放置在MSP的crls文件夹中。 `fabric-ca-client gencrl`命令可用于生成CRL。 任何与hf.GenCRL属性的身份都可以创建一个CRL，其中包含在特定时间段内被吊销的所有证书的序列号。 创建的CRL存储在<msp文件夹> /crls/crl.pem文件中。
 
+以下命令将创建一个包含所有已撤销证书的CRL（过期和未过期），并将CRL存储在〜/msp/crls/crl.pem文件中。
 
+    export FABRIC_CA_CLIENT_HOME=~/clientconfig
+    fabric-ca-client gencrl -M ~/msp
+    
+下一个命令将创建一个CRL，其中包含2017-09-13T16:39:57-08:00（由-revokedafter标志指定）和2017-09-21T16:39之前被撤销的所有证书（过期和未过期） 57-08:00（由-revokedbefore标志指定）并将CRL存储在〜/msp/crls/crl.pem文件中。
 
+    export FABRIC_CA_CLIENT_HOME=~/clientconfig
+    fabric-ca-client gencrl --caname "" --revokedafter 2017-09-13T16:39:57-08:00 --revokedbefore 2017-09-21T16:39:57-08:00 -M ~/msp
 
+-caname标志指定发送此请求的CA的名称。 在这个例子中，gencrl请求被发送到默认的CA.
 
+-revokedafter和-revokedbefore标志指定时间段的下限和上限。 生成的CRL将包含在此期间被吊销的证书。 这些值必须是RFC3339格式中指定的UTC时间戳。 时间戳后面的-revoked不能大于时间戳前的-revoked。
 
+默认情况下，CRL的“下次更新”日期设置为第二天。 crl.expiry CA配置属性可用于指定自定义值。
 
+gencrl命令还将接受-expire after和-expire before标志，这些标志可用于生成带有在这些标志指定的时间段内过期的撤销证书的CRL。 例如，以下命令将生成一个CRL，其中包含在2017-09-13T16:39:57-08:00之后和2017-09-21T16:39:57-08:00之前撤销的证书，并且该证书在 2017-09-13T16:39:57-08:00以及2018-09-13T16:39:57-08:00之前
 
+    export FABRIC_CA_CLIENT_HOME=~/clientconfig
+    fabric-ca-client gencrl --caname "" --expireafter 2017-09-13T16:39:57-08:00 --expirebefore 2018-09-13T16:39:57-08:00  --revokedafter 2017-09-13T16:39:57-08:00 --revokedbefore 2017-09-21T16:39:57-08:00 -M ~/msp
 
+fabric-samples/fabric-ca示例演示如何生成包含已撤销用户证书的CRL并更新通道msp。 然后它将演示使用撤销的用户凭据查询频道将导致授权错误。
 
+### 八.启用TLS
 
+本节更详细地介绍如何为Fabric CA客户端配置TLS。
+
+以下部分可以在fabric-ca-client-config.yaml中配置。
+
+    tls:
+      # Enable TLS (default: false)
+      enabled: true
+      certfiles:
+        - root.pem
+      client:
+        certfile: tls_client-cert.pem
+        keyfile: tls_client-key.pem
+
+certfiles选项是客户端信任的一组根证书。 这通常只是在ca-cert.pem文件中的服务器主目录中找到的根结构CA服务器的证书。
+
+只有在服务器上配置了相互TLS时，才需要客户端选项。
+
+### 九.基于属性的访问控制
+
+访问控制决策可以通过chaincode（以及Hyperledger Fabric运行时）根据身份的属性进行。 这被称为基于属性的访问控制（简称ABAC）。
+
+为了实现这一点，身份的注册证书（ECert）可能包含一个或多个属性名称和值。 链码然后提取属性的值以作出访问控制决定。
+
+例如，假设您正在开发应用程序app1，并希望特定的链式代码操作只能由app1管理员访问。 您的chaincode可以验证调用者的证书（由信任的CA颁发的证书）包含名为app1Admin的值为true的属性。 当然，属性的名称可以是任何值，而且值不一定是布尔值。
+
+那么如何获得具有属性的注册证书？ 有两种方法：
+
+1.当您注册身份时，您可以指定为身份颁发的注册证书在默认情况下应包含一个属性。 此行为可以在注册时被覆盖，但这对于建立默认行为很有用，假设注册发生在您的应用程序之外，不需要任何应用程序更改。
+
+以下显示了如何使用两个属性注册user1：app1Admin和电子邮件。 默认情况下，当用户在注册时没有明确请求属性时，“：ecert”后缀会导致appAdmin属性默认插入到user1的注册证书中。 默认情况下，电子邮件属性未添加到注册证书中。
+
+    fabric-ca-client register --id.name user1 --id.secret user1pw --id.type user --id.affiliation org1 --id.attrs 'app1Admin=true:ecert,email=user1@gmail.com'
+
+2.当您注册身份时，您可能会明确要求将一个或多个属性添加到证书中。 对于每个请求的属性，您可以指定该属性是否可选。 如果没有选择请求并且身份不具有该属性，则会发生错误。
+
+以下显示了如何使用电子邮件属性注册user1，而不使用app1Admin属性，以及可选的电话属性（如果用户拥有电话属性）。
+
+    fabric-ca-client enroll -u http://user1:user1pw@localhost:7054 --enrollment.attrs "email,phone:opt"
+
+下表显示了为每个身份自动注册的三个属性。
+
+|          属性名字     |       	属性值        |
+|---------------------|------------------------|
+|   hf.EnrollmentID   |	     身份的注册ID        |
+|      hf.Type	      |      身份的类型          |
+|   hf.Affiliation    |	     身份的隶属关系      | 
+
+要将任何上述属性默认添加到证书中，您必须使用“：ecert”规范显式注册该属性。 例如，如果注册时没有请求特定属性，则以下注册标识'user1'，以便'hf.Affiliation'属性将被添加到注册证书中。 请注意，隶属关系（即'org1'）的值在'-id.affiliation'和'-id.attrs'标志中必须相同。
+
+    fabric-ca-client register --id.name user1 --id.secret user1pw --id.type user --id.affiliation org1 --id.attrs 'hf.Affiliation=org1:ecert'
+
+有关基于属性的访问控制的chaincode库API的信息，请参阅https://github.com/hyperledger/fabric/tree/release/core/chaincode/lib/cid/README.md
+
+有关演示基于属性的访问控制等的端到端示例，请参阅
+https://github.com/hyperledger/fabric-samples/tree/release/fabric-ca/README.md
+
+### 十.动态服务器配置更新
+
+本节介绍如何使用fabric-ca-client在不重新启动服务器的情况下动态更新fabric-ca-server配置的各个部分。
+
+本节中的所有命令都要求您首先通过执行fabric-ca-client注册命令来注册。
+
+#### 1.动态更新身份
 
 
 
