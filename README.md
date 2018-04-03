@@ -11,6 +11,7 @@ Hyperledger Fabric提供独特的弹性和可扩展架构，区别于其他区�
 ## [Hyperledger fabric总览](https://github.com/guoshijiang/Hyperledger_fabric_v1.0/blob/master/content/introduce.md)
 ## [Hyperledger fabric入门](https://github.com/guoshijiang/Hyperledger_fabric_v1.0/blob/master/content/start.md)
 ## [Hyperledger fabric证书认证服务](https://github.com/guoshijiang/Hyperledger_fabric_v1.0/blob/master/content/ca.md)
+## [SoftHSM 第二版简单介绍](https://github.com/guoshijiang/Hyperledger_fabric_v1.0/blob/master/content/SoftHSM.md)
 ## hyperledger fabric关键概念
 ## hyperledger fabric教程
 ## hyperledger fabric操作指南
